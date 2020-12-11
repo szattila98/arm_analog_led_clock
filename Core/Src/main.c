@@ -23,7 +23,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -33,6 +32,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+const uint8_t HOUR_COLOR[24] = {1, 1, 1, 1, 1, 1, 1, 1, /*||*/ 1, 1, 1, 1, 1, 1, 1, 1, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0,};
+const uint8_t MIN_COLOR[24] =  {1, 1, 1, 1, 1, 1, 1, 1, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0,};
+const uint8_t SEC_COLOR[24] =  {0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 1, 1, 1, 1, 1, 1, 1, 1, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0,};
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -50,20 +52,7 @@ TIM_HandleTypeDef htim4;
 volatile uint32_t last_button = 0;
 uint8_t time_set_mode = 3;
 RTC_TimeTypeDef current_time;
-uint8_t all_led_grb[12][24] = {
-	{1, 1, 1, 1, 1, 1, 1, 1, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
-	{1, 1, 1, 1, 1, 1, 1, 1, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
-};
+uint8_t all_led_grb[12][24];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -166,6 +155,16 @@ void handle_time_change() {
 	}
 }
 
+void set_grb_by_time() {
+	memset(all_led_grb, 0, sizeof all_led_grb); // reset coloring array
+	memcpy(all_led_grb[current_time.Hours % 12], HOUR_COLOR, sizeof(HOUR_COLOR));
+	memcpy(all_led_grb[(uint8_t)(current_time.Minutes/5)], MIN_COLOR, sizeof(MIN_COLOR));
+	memcpy(all_led_grb[(uint8_t)(current_time.Seconds/5)], SEC_COLOR, sizeof(SEC_COLOR));
+	// TODO 5 shades of a color
+	// TODO different overlap colors
+	HAL_Delay(300);
+}
+
 uint8_t led_index = 0;
 uint8_t max_led_index = 12;
 uint8_t grb_index = 0;
@@ -174,12 +173,12 @@ uint16_t led_cycle_counter = 0;
 uint16_t max_led_cycle_period = 288;
 uint8_t reset_cycle_period = 40;
 
-void handle_led_changes(uint8_t grb[12][24]) {
+void handle_led_changes() {
 	if (led_cycle_counter >= 0 && led_cycle_counter < max_led_cycle_period) {
-		if (grb[led_index][grb_index] == 0) {
+		if (all_led_grb[led_index][grb_index] == 0) {
 		  htim4.Instance-> CCR1 = htim4.Instance->ARR * (1/3);	// if grb bit is null
 		}
-		if (grb[led_index][grb_index] == 1) {
+		if (all_led_grb[led_index][grb_index] == 1) {
 		  htim4.Instance-> CCR1 = htim4.Instance->ARR * (2/3);	// if grb bit is one
 		}
 		grb_index++;
@@ -194,8 +193,9 @@ void handle_led_changes(uint8_t grb[12][24]) {
 	} else if (led_cycle_counter >= max_led_cycle_period && led_cycle_counter < (max_led_cycle_period + reset_cycle_period)) {
 		htim4.Instance-> CCR1 = 0;
 		led_cycle_counter++;
-	} else {
-		led_cycle_counter = 0;
+		if (led_cycle_counter == max_led_cycle_period + reset_cycle_period) {
+			led_cycle_counter = 0;
+		}
 	}
 
 	/*for (led_index = 0; led_index < max_led_index; led_index++) {
@@ -259,14 +259,16 @@ int main(void)
 	  HAL_RTC_GetTime(&hrtc, &current_time, RTC_FORMAT_BIN); // gets current time to display
 	  onpress_change_time_set_mode(); // checks for button press and increments change_time_mod variable
 	  handle_time_change(); // handles time change with the encoder
-	  handle_led_changes(all_led_grb); // supposed to change one leds color for now
+	  set_grb_by_time(); // sets grb array by the current time
+	  handle_led_changes(); // supposed to change one leds color for now
 
-	  // TODO cleanup and functions to different files
+	  // TODO cleanup (vars, comments, oddities) and functions to different files maybe
 	  // TODO led blink on change time modes - alarm with if condition
 	  // TODO readme
 
-	  outBufferUSBSize = sprintf(outBufferUSB, "value: %d, count: %d, time: %02d:%02d:%02d%, led: %d, grb: %d, cycle: %d\n\r",
-	  			  time_set_mode, ((TIM2->CNT)>>2), current_time.Hours, current_time.Minutes, current_time.Seconds, led_index, grb_index, led_cycle_counter);
+	  outBufferUSBSize = sprintf(outBufferUSB, "value: %d, count: %d, time: %02d:%02d:%02d%, led: %d, grb: %d, cycle: %d, hour_l: %d, min_l: %d, sec_l: %d\n\r",
+	  			  time_set_mode, ((TIM2->CNT)>>2), current_time.Hours, current_time.Minutes, current_time.Seconds, led_index, grb_index, led_cycle_counter,
+				  all_led_grb[0][0], all_led_grb[1][0], all_led_grb[2][8]);
 	  CDC_Transmit_FS(outBufferUSB, outBufferUSBSize);
     /* USER CODE END WHILE */
 
