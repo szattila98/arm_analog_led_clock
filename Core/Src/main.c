@@ -50,6 +50,20 @@ TIM_HandleTypeDef htim4;
 volatile uint32_t last_button = 0;
 uint8_t time_set_mode = 3;
 RTC_TimeTypeDef current_time;
+uint8_t all_led_grb[12][24] = {
+	{1, 1, 1, 1, 1, 1, 1, 1, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
+	{1, 1, 1, 1, 1, 1, 1, 1, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
+	{0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0},
+};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -152,48 +166,51 @@ void handle_time_change() {
 	}
 }
 
-void handle_led_changes(uint8_t grb[]) {
-	uint8_t grb_index = 0;
-	uint8_t led_cycle_counter = 1;
-	uint8_t max_led_cycle_period = 24;
-	uint8_t reset_cycle_period = 40;
+uint8_t led_index = 0;
+uint8_t max_led_index = 12;
+uint8_t grb_index = 0;
+uint8_t max_grb_index = 24;
+uint16_t led_cycle_counter = 0;
+uint16_t max_led_cycle_period = 288;
+uint8_t reset_cycle_period = 40;
 
-	if (led_cycle_counter >= 1 && led_cycle_counter <= max_led_cycle_period) {
-		if (grb[grb_index] == 0) {
+void handle_led_changes(uint8_t grb[12][24]) {
+	if (led_cycle_counter >= 0 && led_cycle_counter < max_led_cycle_period) {
+		if (grb[led_index][grb_index] == 0) {
 		  htim4.Instance-> CCR1 = htim4.Instance->ARR * (1/3);	// if grb bit is null
 		}
-		if (grb[grb_index] == 1) {
+		if (grb[led_index][grb_index] == 1) {
 		  htim4.Instance-> CCR1 = htim4.Instance->ARR * (2/3);	// if grb bit is one
 		}
-		if (grb_index < 23) {
-		  grb_index++;		// increment bit index
-		} else {
-		  grb_index = 0;	// restart index if it reached the 3 byte mark
+		grb_index++;
+		if (grb_index >= max_grb_index) {
+			grb_index = 0;
+			led_index++;
+			if (led_index >= max_led_index) {
+				led_index = 0;
+			}
 		}
 		led_cycle_counter++;
-	} else if (led_cycle_counter > max_led_cycle_period && led_cycle_counter < (max_led_cycle_period + reset_cycle_period)) {
-		htim4.Instance-> CCR1 = 0;	// send every reset signal bar from the last
+	} else if (led_cycle_counter >= max_led_cycle_period && led_cycle_counter < (max_led_cycle_period + reset_cycle_period)) {
+		htim4.Instance-> CCR1 = 0;
 		led_cycle_counter++;
 	} else {
-		htim4.Instance-> CCR1 = 0;	// send last reset signal and cycle counter
-		led_cycle_counter = 1;
-
+		led_cycle_counter = 0;
 	}
 
-	/*uint8_t index = 0;
-	if (index < 24) {
-	  if (grb[index] == 0) {
-		  htim4.Instance-> CCR1 = htim4.Instance->ARR * (1/3); // ha nulla van
-	  }
-	  if (grb[index] == 1) {
-		  htim4.Instance-> CCR1 = htim4.Instance->ARR * (2/3); // ha egyes van
-	  }
-	} else if (index >= 24 && index < 64) {
-	  htim4.Instance-> CCR1 = 0; // reset 40 bitidőig
-	} else {
-	  index = -1; // vissza 0-ára
+	/*for (led_index = 0; led_index < max_led_index; led_index++) {
+		for (grb_index = 0; grb_index < max_grb_index; grb_index++) {
+			if (grb[led_index][grb_index] == 0) {
+			  htim4.Instance-> CCR1 = htim4.Instance->ARR * (1/3);
+			}
+			if (grb[led_index][grb_index] == 1) {
+			  htim4.Instance-> CCR1 = htim4.Instance->ARR * (2/3);
+			}
+		}
 	}
-	index ++;*/
+	for (int i = 0; i < reset_cycle_period; i++) {
+		htim4.Instance-> CCR1 = 0;
+	}*/
 }
 /* USER CODE END 0 */
 
@@ -238,23 +255,18 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  uint8_t grb[24] = {
-		  1, 0, 0, 1, 0, 1, 1, 0,
-		  0, 0, 0, 0, 0, 0, 0, 0,
-		  0, 0, 0, 0, 0, 0, 0, 0
-  };
 	while (1) {
 	  HAL_RTC_GetTime(&hrtc, &current_time, RTC_FORMAT_BIN); // gets current time to display
 	  onpress_change_time_set_mode(); // checks for button press and increments change_time_mod variable
 	  handle_time_change(); // handles time change with the encoder
-	  handle_led_changes(grb); // supposed to change one leds color for now
+	  handle_led_changes(all_led_grb); // supposed to change one leds color for now
 
 	  // TODO cleanup and functions to different files
 	  // TODO led blink on change time modes - alarm with if condition
 	  // TODO readme
 
-	  outBufferUSBSize = sprintf(outBufferUSB, "value: %d, count: %d, time: %02d:%02d:%02d%\n\r",
-	  			  time_set_mode, ((TIM2->CNT)>>2), current_time.Hours, current_time.Minutes, current_time.Seconds);
+	  outBufferUSBSize = sprintf(outBufferUSB, "value: %d, count: %d, time: %02d:%02d:%02d%, led: %d, grb: %d, cycle: %d\n\r",
+	  			  time_set_mode, ((TIM2->CNT)>>2), current_time.Hours, current_time.Minutes, current_time.Seconds, led_index, grb_index, led_cycle_counter);
 	  CDC_Transmit_FS(outBufferUSB, outBufferUSBSize);
     /* USER CODE END WHILE */
 
