@@ -32,9 +32,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-const uint8_t HOUR_COLOR[24] = {1, 1, 1, 1, 1, 1, 1, 1, /*||*/ 1, 1, 1, 1, 1, 1, 1, 1, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0,};
+const uint8_t HOUR_COLOR[24] = {0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 1, 1, 1, 1, 1, 1, 1, 1, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0,};
 const uint8_t MIN_COLOR[24] =  {1, 1, 1, 1, 1, 1, 1, 1, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0,};
-const uint8_t SEC_COLOR[24] =  {0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 1, 1, 1, 1, 1, 1, 1, 1, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0,};
+const uint8_t SEC_COLOR[24] =  {0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 1, 1, 1, 1, 1, 1, 1, 1,};
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -156,13 +156,33 @@ void handle_time_change() {
 }
 
 void set_grb_by_time() {
+	uint8_t hour_led_index = current_time.Hours % 12;
+	uint8_t min_led_index = (uint8_t) current_time.Minutes / 5;
+	uint8_t sec_led_index = (uint8_t) current_time.Seconds / 5;
+
 	memset(all_led_grb, 0, sizeof all_led_grb); // reset coloring array
-	memcpy(all_led_grb[current_time.Hours % 12], HOUR_COLOR, sizeof(HOUR_COLOR));
-	memcpy(all_led_grb[(uint8_t)(current_time.Minutes/5)], MIN_COLOR, sizeof(MIN_COLOR));
-	memcpy(all_led_grb[(uint8_t)(current_time.Seconds/5)], SEC_COLOR, sizeof(SEC_COLOR));
-	// TODO 5 shades of a color
-	// TODO different overlap colors
-	HAL_Delay(300);
+	if (hour_led_index == min_led_index && min_led_index == sec_led_index && hour_led_index == sec_led_index) { // mix colors on overlap with copying parts of other colors
+		memcpy(all_led_grb[sec_led_index], SEC_COLOR, sizeof(SEC_COLOR));
+		memcpy(all_led_grb[hour_led_index], HOUR_COLOR, sizeof(HOUR_COLOR) - 8);
+		memcpy(all_led_grb[min_led_index], MIN_COLOR, sizeof(MIN_COLOR) - 16);
+	} else if (hour_led_index == min_led_index) {
+		memcpy(all_led_grb[hour_led_index], HOUR_COLOR, sizeof(HOUR_COLOR));
+		memcpy(all_led_grb[min_led_index], MIN_COLOR, sizeof(MIN_COLOR) - 16);
+		memcpy(all_led_grb[sec_led_index], SEC_COLOR, sizeof(SEC_COLOR));
+	} else if (min_led_index == sec_led_index) {
+		memcpy(all_led_grb[sec_led_index], SEC_COLOR, sizeof(SEC_COLOR));
+		memcpy(all_led_grb[min_led_index], MIN_COLOR, sizeof(MIN_COLOR) - 16);
+		memcpy(all_led_grb[hour_led_index], HOUR_COLOR, sizeof(HOUR_COLOR));
+	} else if (hour_led_index == sec_led_index) {
+		memcpy(all_led_grb[sec_led_index], SEC_COLOR, sizeof(SEC_COLOR));
+		memcpy(all_led_grb[hour_led_index], HOUR_COLOR, sizeof(HOUR_COLOR) - 8);
+		memcpy(all_led_grb[min_led_index], MIN_COLOR, sizeof(MIN_COLOR));
+	} else {
+		memcpy(all_led_grb[hour_led_index], HOUR_COLOR, sizeof(HOUR_COLOR));
+		memcpy(all_led_grb[min_led_index], MIN_COLOR, sizeof(MIN_COLOR));
+		memcpy(all_led_grb[sec_led_index], SEC_COLOR, sizeof(SEC_COLOR));
+	}
+	// TODO 5 shades of a color so it can be read accurately, only do when led works, as it is more complex
 }
 
 uint8_t led_index = 0;
@@ -268,7 +288,7 @@ int main(void)
 
 	  outBufferUSBSize = sprintf(outBufferUSB, "value: %d, count: %d, time: %02d:%02d:%02d%, led: %d, grb: %d, cycle: %d, hour_l: %d, min_l: %d, sec_l: %d\n\r",
 	  			  time_set_mode, ((TIM2->CNT)>>2), current_time.Hours, current_time.Minutes, current_time.Seconds, led_index, grb_index, led_cycle_counter,
-				  all_led_grb[0][0], all_led_grb[1][0], all_led_grb[2][8]);
+				  all_led_grb[0][8], all_led_grb[1][0], all_led_grb[2][16]);
 	  CDC_Transmit_FS(outBufferUSB, outBufferUSBSize);
     /* USER CODE END WHILE */
 
