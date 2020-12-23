@@ -32,9 +32,13 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-const uint8_t HOUR_COLOR[24] = {0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 1, 1, 1, 1, 1, 1, 1, 1, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0,};
-const uint8_t MIN_COLOR[24] =  {1, 1, 1, 1, 1, 1, 1, 1, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0,};
-const uint8_t SEC_COLOR[24] =  {0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 1, 1, 1, 1, 1, 1, 1, 1,};
+#define COLOR_SIZE 24
+#define ALL_GRB_SIZE 288
+#define RESET_SIZE 50
+
+const uint8_t HOUR_COLOR[COLOR_SIZE] = {0x1,0x1,0x1,0x1,0x1,0x1,0xC,0xC, /*||*/ 0xC,0xC,0xC,0xC,0xC,0xC,0xC,0xC, /*||*/ 0x1,0x1,0x1,0x1,0xC,0xC,0xC,0xC};
+const uint8_t MIN_COLOR[COLOR_SIZE] =  {0x1,0x1,0x1,0x1,0xC,0xC,0xC,0xC, /*||*/ 0x1,0x1,0x1,0x1,0xC,0xC,0xC,0xC, /*||*/ 0x1,0x1,0x1,0x1,0xC,0xC,0xC,0xC};
+const uint8_t SEC_COLOR[COLOR_SIZE] =  {0x1,0x1,0x1,0x1,0x1,0x1,0xC,0xC, /*||*/ 0x1,0x1,0x1,0x1,0xC,0xC,0xC,0xC, /*||*/ 0xC,0xC,0x1,0x1,0x1,0x1,0xC,0xC};
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -45,14 +49,16 @@ const uint8_t SEC_COLOR[24] =  {0, 0, 0, 0, 0, 0, 0, 0, /*||*/ 0, 0, 0, 0, 0, 0,
 /* Private variables ---------------------------------------------------------*/
 RTC_HandleTypeDef hrtc;
 
+SPI_HandleTypeDef hspi1;
+
 TIM_HandleTypeDef htim2;
-TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
 volatile uint32_t last_button = 0;
 uint8_t time_set_mode = 3;
 RTC_TimeTypeDef current_time;
-uint8_t all_led_grb[12][24];
+uint8_t all_grb_leds[ALL_GRB_SIZE] = {0xC};
+uint8_t reset[RESET_SIZE] = {0xC};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -60,7 +66,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_RTC_Init(void);
-static void MX_TIM4_Init(void);
+static void MX_SPI1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -160,77 +166,19 @@ void set_grb_by_time() {
 	uint8_t min_led_index = (uint8_t) current_time.Minutes / 5;
 	uint8_t sec_led_index = (uint8_t) current_time.Seconds / 5;
 
-	memset(all_led_grb, 0, sizeof all_led_grb); // reset coloring array
-	if (hour_led_index == min_led_index && min_led_index == sec_led_index && hour_led_index == sec_led_index) { // mix colors on overlap with copying parts of other colors
-		memcpy(all_led_grb[sec_led_index], SEC_COLOR, sizeof(SEC_COLOR));
-		memcpy(all_led_grb[hour_led_index], HOUR_COLOR, sizeof(HOUR_COLOR) - 8);
-		memcpy(all_led_grb[min_led_index], MIN_COLOR, sizeof(MIN_COLOR) - 16);
-	} else if (hour_led_index == min_led_index) {
-		memcpy(all_led_grb[hour_led_index], HOUR_COLOR, sizeof(HOUR_COLOR));
-		memcpy(all_led_grb[min_led_index], MIN_COLOR, sizeof(MIN_COLOR) - 16);
-		memcpy(all_led_grb[sec_led_index], SEC_COLOR, sizeof(SEC_COLOR));
-	} else if (min_led_index == sec_led_index) {
-		memcpy(all_led_grb[sec_led_index], SEC_COLOR, sizeof(SEC_COLOR));
-		memcpy(all_led_grb[min_led_index], MIN_COLOR, sizeof(MIN_COLOR) - 16);
-		memcpy(all_led_grb[hour_led_index], HOUR_COLOR, sizeof(HOUR_COLOR));
-	} else if (hour_led_index == sec_led_index) {
-		memcpy(all_led_grb[sec_led_index], SEC_COLOR, sizeof(SEC_COLOR));
-		memcpy(all_led_grb[hour_led_index], HOUR_COLOR, sizeof(HOUR_COLOR) - 8);
-		memcpy(all_led_grb[min_led_index], MIN_COLOR, sizeof(MIN_COLOR));
-	} else {
-		memcpy(all_led_grb[hour_led_index], HOUR_COLOR, sizeof(HOUR_COLOR));
-		memcpy(all_led_grb[min_led_index], MIN_COLOR, sizeof(MIN_COLOR));
-		memcpy(all_led_grb[sec_led_index], SEC_COLOR, sizeof(SEC_COLOR));
+	for (int i = 0; i < ALL_GRB_SIZE; i++) { // reset leds by setting every bit to 1, black
+		all_grb_leds[i] = 0x1;
 	}
-	// TODO 5 shades of a color so it can be read accurately, only do when led works, as it is more complex
+	for (int i = 0; i < COLOR_SIZE; i++) {
+		all_grb_leds[hour_led_index * COLOR_SIZE + i] = HOUR_COLOR[i];
+		all_grb_leds[min_led_index * COLOR_SIZE + i] = MIN_COLOR[i];
+		all_grb_leds[sec_led_index * COLOR_SIZE + i] = SEC_COLOR[i];
+	}
 }
 
-uint8_t led_index = 0;
-uint8_t max_led_index = 12;
-uint8_t grb_index = 0;
-uint8_t max_grb_index = 24;
-uint16_t led_cycle_counter = 0;
-uint16_t max_led_cycle_period = 288;
-uint8_t reset_cycle_period = 40;
-
 void handle_led_changes() {
-	if (led_cycle_counter >= 0 && led_cycle_counter < max_led_cycle_period) {
-		if (all_led_grb[led_index][grb_index] == 0) {
-		  htim4.Instance-> CCR1 = htim4.Instance->ARR * (1/3);	// if grb bit is null
-		}
-		if (all_led_grb[led_index][grb_index] == 1) {
-		  htim4.Instance-> CCR1 = htim4.Instance->ARR * (2/3);	// if grb bit is one
-		}
-		grb_index++;
-		if (grb_index >= max_grb_index) {
-			grb_index = 0;
-			led_index++;
-			if (led_index >= max_led_index) {
-				led_index = 0;
-			}
-		}
-		led_cycle_counter++;
-	} else if (led_cycle_counter >= max_led_cycle_period && led_cycle_counter < (max_led_cycle_period + reset_cycle_period)) {
-		htim4.Instance-> CCR1 = 0;
-		led_cycle_counter++;
-		if (led_cycle_counter == max_led_cycle_period + reset_cycle_period) {
-			led_cycle_counter = 0;
-		}
-	}
-
-	/*for (led_index = 0; led_index < max_led_index; led_index++) {
-		for (grb_index = 0; grb_index < max_grb_index; grb_index++) {
-			if (grb[led_index][grb_index] == 0) {
-			  htim4.Instance-> CCR1 = htim4.Instance->ARR * (1/3);
-			}
-			if (grb[led_index][grb_index] == 1) {
-			  htim4.Instance-> CCR1 = htim4.Instance->ARR * (2/3);
-			}
-		}
-	}
-	for (int i = 0; i < reset_cycle_period; i++) {
-		htim4.Instance-> CCR1 = 0;
-	}*/
+	HAL_SPI_Transmit(&hspi1, all_grb_leds, sizeof(all_grb_leds), 10);
+	HAL_SPI_Transmit(&hspi1, reset, sizeof(reset), 10);
 }
 /* USER CODE END 0 */
 
@@ -266,11 +214,10 @@ int main(void)
   MX_USB_DEVICE_Init();
   MX_TIM2_Init();
   MX_RTC_Init();
-  MX_TIM4_Init();
+  MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
   time_backup_check(); // restores time from backup register
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -282,13 +229,8 @@ int main(void)
 	  set_grb_by_time(); // sets grb array by the current time
 	  handle_led_changes(); // supposed to change one leds color for now
 
-	  // TODO cleanup (vars, comments, oddities) and functions to different files maybe
-	  // TODO led blink on change time modes - alarm with if condition
-	  // TODO readme
-
-	  outBufferUSBSize = sprintf(outBufferUSB, "value: %d, count: %d, time: %02d:%02d:%02d%, led: %d, grb: %d, cycle: %d, hour_l: %d, min_l: %d, sec_l: %d\n\r",
-	  			  time_set_mode, ((TIM2->CNT)>>2), current_time.Hours, current_time.Minutes, current_time.Seconds, led_index, grb_index, led_cycle_counter,
-				  all_led_grb[0][8], all_led_grb[1][0], all_led_grb[2][16]);
+	  outBufferUSBSize = sprintf(outBufferUSB, "time_set_mode: %d, encoder_value: %d, time: %02d:%02d:%02d%, led: %d, grb: %d, cycle: %d \n\r",
+	  			  time_set_mode, ((TIM2->CNT)>>2), current_time.Hours, current_time.Minutes, current_time.Seconds);
 	  CDC_Transmit_FS(outBufferUSB, outBufferUSBSize);
     /* USER CODE END WHILE */
 
@@ -317,7 +259,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL6;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -327,17 +269,17 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV4;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
   {
     Error_Handler();
   }
   PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_RTC|RCC_PERIPHCLK_USB;
   PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
-  PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLL_DIV1_5;
+  PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLL;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
@@ -402,6 +344,44 @@ static void MX_RTC_Init(void)
 }
 
 /**
+  * @brief SPI1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI1_Init(void)
+{
+
+  /* USER CODE BEGIN SPI1_Init 0 */
+
+  /* USER CODE END SPI1_Init 0 */
+
+  /* USER CODE BEGIN SPI1_Init 1 */
+
+  /* USER CODE END SPI1_Init 1 */
+  /* SPI1 parameter configuration*/
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_SOFT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 10;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI1_Init 2 */
+
+  /* USER CODE END SPI1_Init 2 */
+
+}
+
+/**
   * @brief TIM2 Initialization Function
   * @param None
   * @retval None
@@ -451,69 +431,6 @@ static void MX_TIM2_Init(void)
 }
 
 /**
-  * @brief TIM4 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM4_Init(void)
-{
-
-  /* USER CODE BEGIN TIM4_Init 0 */
-
-  /* USER CODE END TIM4_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-  TIM_OC_InitTypeDef sConfigOC = {0};
-
-  /* USER CODE BEGIN TIM4_Init 1 */
-
-  /* USER CODE END TIM4_Init 1 */
-  htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 0;
-  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 89;
-  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_TIM_PWM_Init(&htim4) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_TIM_OnePulse_Init(&htim4, TIM_OPMODE_SINGLE) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 0;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM4_Init 2 */
-
-  /* USER CODE END TIM4_Init 2 */
-  HAL_TIM_MspPostInit(&htim4);
-
-}
-
-/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -526,7 +443,6 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin : BTN_Pin */
   GPIO_InitStruct.Pin = BTN_Pin;
