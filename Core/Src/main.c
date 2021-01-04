@@ -229,7 +229,7 @@ int main(void)
 	  set_grb_by_time(); // sets grb array by the current time
 	  handle_led_changes(); // supposed to change one leds color for now
 
-	  outBufferUSBSize = sprintf(outBufferUSB, "time_set_mode: %d, encoder_value: %d, time: %02d:%02d:%02d%, led: %d, grb: %d, cycle: %d \n\r",
+	  outBufferUSBSize = sprintf(outBufferUSB, "time_set_mode: %d, encoder_value: %d, time: %02d:%02d:%02d% \n\r",
 	  			  time_set_mode, ((TIM2->CNT)>>2), current_time.Hours, current_time.Minutes, current_time.Seconds);
 	  CDC_Transmit_FS(outBufferUSB, outBufferUSBSize);
     /* USER CODE END WHILE */
